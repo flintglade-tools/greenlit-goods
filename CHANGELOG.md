@@ -2,6 +2,17 @@
 
 All notable changes are documented here. This project follows semantic versioning.
 
+## [Unreleased]
+
+### Added
+
+- Added a root, Marketplace-compatible Docker action that audits checked-in feeds with the real Greenlit Goods CLI and defaults to strict CI gating.
+- Added action input validation, an entrypoint contract test, Docker integration coverage, and Marketplace release documentation.
+
+### Changed
+
+- Advanced the development version to `0.2.0` for the new GitHub Action surface.
+
 ## [0.1.1] - 2026-07-13
 
 ### Fixed

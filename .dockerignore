@@ -1,0 +1,14 @@
+.git
+.github
+target
+*.log
+.env
+.env.*
+docs
+samples
+action/tests
+CHANGELOG.md
+CONTRIBUTING.md
+README.md
+SECURITY.md
+THIRD_PARTY_NOTICES.md

@@ -8,6 +8,8 @@ Keep changes narrow and attach evidence to behavior changes.
 4. Run `cargo clippy --workspace --all-targets --locked -- -D warnings`.
 5. Run `cargo test --workspace --locked` and `cargo build --workspace --release --locked`.
 
+Changes to `action.yml`, `Dockerfile`, or `action/` must also pass `./action/tests/entrypoint_test.sh` and the Docker action integration job. Keep the wrapper audit-only, credential-free, and aligned with CLI exit codes; do not add claims beyond the feed-local support boundary.
+
 Rule changes must cite an authoritative Google specification page and update `docs/SPEC_SUPPORT.md` plus the verification date. Heuristics must use the heuristic finding basis and must not claim Google disapproval. Parser changes must preserve the fail-closed rewrite contract and include adversarial coverage.
 
 Never include real merchant feeds, credentials, personal data, or secret-bearing logs in tests or issues.
