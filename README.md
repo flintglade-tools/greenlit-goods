@@ -6,7 +6,7 @@ This release is an independent feed preflight tool. It is not affiliated with Go
 
 ## Release status
 
-Version `0.1.0` is ready for local CLI/library use within the support boundary below. JSON output is versioned with `schema_version: 1`; incompatible JSON changes require a schema-version change.
+Version `0.1.1` is ready for local CLI/library use within the support boundary below. JSON output is versioned with `schema_version: 1`; incompatible JSON changes require a schema-version change.
 
 The implementation was verified with Rust 1.96.1. The manifest requires Rust 1.96 or newer.
 

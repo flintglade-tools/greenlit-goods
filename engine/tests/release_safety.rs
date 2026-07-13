@@ -114,6 +114,29 @@ fn supported_flat_xml_still_fixes_and_reparses() {
 }
 
 #[test]
+fn xml_declaration_must_be_first_and_unique_for_rewriting() {
+    let base = product("");
+    let standard = format!(r#"<?xml version="1.0" encoding="UTF-8"?>{base}"#);
+    let report = audit_auto(standard.as_bytes(), &AuditOptions::default()).unwrap();
+    assert!(report.rewrite_safe);
+
+    let misplaced = [
+        format!(" \n<?xml version=\"1.0\"?>{base}"),
+        base.replacen("<channel>", "<?xml version=\"1.0\"?><channel>", 1),
+        format!("<?xml version=\"1.0\"?><?xml version=\"1.0\"?>{base}"),
+    ];
+
+    for xml in misplaced {
+        let report = audit_auto(xml.as_bytes(), &AuditOptions::default()).unwrap();
+        assert!(!report.rewrite_safe, "unexpected rewrite-safe XML: {xml}");
+        assert!(matches!(
+            fix_auto(xml.as_bytes(), &FixOptions::default()),
+            Err(EngineError::UnsafeRewrite(_))
+        ));
+    }
+}
+
+#[test]
 fn parser_limits_depth_attributes_and_field_size() {
     let deep = format!(
         "{}x{}",
@@ -190,6 +213,11 @@ fn unsupported_rss_shapes_are_auditable_but_never_rewritten() {
         base.replace(
             "<description>A sufficiently long and accurate product description for testing.</description>",
             "<description><![CDATA[valid\u{1}invalid]]></description>",
+        ),
+        base.replacen(
+            "<rss",
+            "<?xml version=\"1.0\" standalone=\"yes\"?><rss",
+            1,
         ),
     ];
 

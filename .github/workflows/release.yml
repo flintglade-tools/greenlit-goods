@@ -127,6 +127,7 @@ jobs:
           New-Item -ItemType Directory -Path $stage
           Copy-Item target/release/greenlit.exe, README.md, LICENSE, CHANGELOG.md, SECURITY.md, THIRD_PARTY_NOTICES.md -Destination $stage
           Compress-Archive -Path $stage -DestinationPath "dist/$asset.zip"
+          Remove-Item -LiteralPath $stage -Recurse -Force
           $hash = (Get-FileHash "dist/$asset.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $asset.zip" | Set-Content "dist/$asset.zip.sha256" -Encoding ascii
       - name: Upload assets to release

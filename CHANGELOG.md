@@ -2,6 +2,15 @@
 
 All notable changes are documented here. This project follows semantic versioning.
 
+## [0.1.1] - 2026-07-13
+
+### Fixed
+
+- Decoded and validated Atom `href` values before exposing them in audit data.
+- Required XML declarations to appear once, before all document content, for safe rewriting.
+- Rejected the XML 1.0 noncharacters `U+FFFE` and `U+FFFF` in text and CDATA.
+- Removed the Windows packaging staging directory before uploading release assets.
+
 ## [0.1.0] - 2026-07-13
 
 ### Added

@@ -18,6 +18,7 @@
 use quick_xml::escape::resolve_xml_entity;
 use quick_xml::events::{BytesCData, BytesRef, BytesStart, BytesText, Event};
 use quick_xml::reader::Reader;
+use quick_xml::{encoding::Decoder, XmlVersion};
 
 use crate::error::{EngineError, Result};
 use crate::finding::{Finding, Severity};
@@ -58,9 +59,16 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
     let mut record_no = 0u64;
     let mut seen_rss = false;
     let mut seen_channel = false;
+    let mut document_started = false;
 
     loop {
-        match reader.read_event_into(&mut buf) {
+        let event = reader.read_event_into(&mut buf);
+        let declaration_is_misplaced = matches!(&event, Ok(Event::Decl(_))) && document_started;
+        if !matches!(&event, Ok(Event::Eof)) {
+            document_started = true;
+        }
+
+        match event {
             Ok(Event::Start(e)) => {
                 enforce_element_limits(&e, stack.len())?;
                 let raw_name = qname(&e);
@@ -161,7 +169,11 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                     cap_attr = Some(name.clone());
                     cap_buf.clear();
                     cap_depth = stack.len();
-                    cap_href = atom_href_link.then(|| get_href(&e)).flatten();
+                    cap_href = if atom_href_link {
+                        get_href(&e, reader.decoder())?
+                    } else {
+                        None
+                    };
                 } else if current.is_some() && cap_attr.is_some() {
                     feed.block_rewrite(format!(
                         "nested product structure inside '{}' is audit-only",
@@ -225,7 +237,7 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                     }
                     // Atom links carry the URL in an href attribute.
                     if atom_href_link {
-                        if let Some(href) = get_href(&e) {
+                        if let Some(href) = get_href(&e, reader.decoder())? {
                             if let Some(reason) = store_attr(product, &name, href) {
                                 feed.block_rewrite(reason);
                             }
@@ -394,6 +406,38 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
 
             Ok(Event::Eof) => break,
 
+            Ok(Event::Decl(declaration)) => {
+                if declaration_is_misplaced {
+                    feed.block_rewrite(
+                        "XML declarations must appear once, before all document content",
+                    );
+                }
+                let version = declaration.version().map_err(|error| {
+                    EngineError::Xml(format!("invalid XML declaration: {error}"))
+                })?;
+                if version.as_ref() != b"1.0" {
+                    feed.block_rewrite("only XML 1.0 declarations can be rewritten safely");
+                }
+                if let Some(encoding) = declaration.encoding() {
+                    let encoding = encoding.map_err(|error| {
+                        EngineError::Xml(format!("invalid XML declaration encoding: {error}"))
+                    })?;
+                    if !encoding.as_ref().eq_ignore_ascii_case(b"UTF-8") {
+                        feed.block_rewrite(
+                            "non-UTF-8 XML declarations cannot be preserved during rewriting",
+                        );
+                    }
+                }
+                if let Some(standalone) = declaration.standalone() {
+                    standalone.map_err(|error| {
+                        EngineError::Xml(format!("invalid XML standalone declaration: {error}"))
+                    })?;
+                    feed.block_rewrite(
+                        "XML standalone declarations are not preserved during rewriting",
+                    );
+                }
+            }
+
             Ok(Event::Comment(_)) => {
                 feed.block_rewrite("XML comments are not represented for rewriting");
             }
@@ -435,8 +479,6 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                 feed.mark_incomplete("XML parsing stopped before the end of the feed");
                 break;
             }
-
-            _ => {}
         }
         buf.clear();
     }
@@ -498,7 +540,7 @@ fn qname(e: &BytesStart) -> String {
 }
 
 /// Read an element's `href` attribute, if any (used for Atom links).
-fn get_href(e: &BytesStart) -> Option<String> {
+fn get_href(e: &BytesStart, decoder: Decoder) -> Result<Option<String>> {
     // Every Start/Empty event is validated by `enforce_element_limits` before
     // these helpers run, so an attribute error here would violate that invariant.
     for attr in e
@@ -506,10 +548,16 @@ fn get_href(e: &BytesStart) -> Option<String> {
         .map(|attr| attr.expect("XML attributes were validated before inspection"))
     {
         if attr.key.as_ref() == b"href" {
-            return Some(String::from_utf8_lossy(&attr.value).into_owned());
+            let value = attr
+                .decoded_and_normalized_value(XmlVersion::Implicit1_0, decoder)
+                .map_err(|error| EngineError::Xml(format!("invalid href attribute: {error}")))?
+                .into_owned();
+            return validate_xml10_text(value)
+                .map(Some)
+                .map_err(|error| EngineError::Xml(format!("invalid href attribute: {error}")));
         }
     }
-    None
+    Ok(None)
 }
 
 fn has_non_href_attributes(e: &BytesStart) -> bool {
@@ -576,7 +624,12 @@ fn validate_xml10_text(value: String) -> std::result::Result<String, String> {
     if let Some(character) = value.chars().find(|character| {
         !matches!(
             *character,
-            '\u{9}' | '\u{A}' | '\u{D}' | '\u{20}'..='\u{D7FF}' | '\u{E000}'..='\u{10FFFF}'
+            '\u{9}'
+                | '\u{A}'
+                | '\u{D}'
+                | '\u{20}'..='\u{D7FF}'
+                | '\u{E000}'..='\u{FFFD}'
+                | '\u{10000}'..='\u{10FFFF}'
         )
     }) {
         return Err(format!(
@@ -625,4 +678,16 @@ fn enforce_field_limit(value: &str) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_xml10_text;
+
+    #[test]
+    fn xml10_rejects_bmp_noncharacters() {
+        assert!(validate_xml10_text("\u{FFFE}".to_string()).is_err());
+        assert!(validate_xml10_text("\u{FFFF}".to_string()).is_err());
+        assert!(validate_xml10_text("\u{10000}".to_string()).is_ok());
+    }
 }

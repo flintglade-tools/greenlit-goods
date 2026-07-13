@@ -114,6 +114,20 @@ fn repeated_additional_image_links_are_joined() {
     );
 }
 
+#[test]
+fn atom_href_entities_are_decoded_for_auditing() {
+    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel>
+      <entry><g:id>A1</g:id><title>Atom product title</title>
+        <link href="https://store.example/a1?color=red&amp;size=large"/></entry>
+    </channel></rss>"#;
+    let feed = parse_auto(xml.as_bytes()).expect("parse Atom-style entry");
+    assert_eq!(
+        feed.products[0].get("link"),
+        Some("https://store.example/a1?color=red&size=large")
+    );
+    assert!(!feed.rewrite_safe(), "Atom entries remain audit-only");
+}
+
 // ---------------------------------------------------------------------------
 // CSV robustness
 // ---------------------------------------------------------------------------
