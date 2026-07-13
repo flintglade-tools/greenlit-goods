@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify tag matches Cargo version
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)
+          test "v${version}" = "${GITHUB_REF_NAME}"
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --draft --generate-notes --verify-tag
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+          - os: macos-latest
+            label: macos
+          - os: windows-latest
+            label: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - run: cargo test --workspace --locked
+      - run: cargo build --workspace --release --locked
+      - name: Package Unix binary
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          asset="greenlit-${GITHUB_REF_NAME}-${{ matrix.label }}"
+          mkdir dist
+          tar -czf "dist/${asset}.tar.gz" -C target/release greenlit
+          shasum -a 256 "dist/${asset}.tar.gz" > "dist/${asset}.tar.gz.sha256"
+      - name: Package Windows binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $asset = "greenlit-$env:GITHUB_REF_NAME-${{ matrix.label }}"
+          New-Item -ItemType Directory -Path dist
+          Compress-Archive -Path target/release/greenlit.exe -DestinationPath "dist/$asset.zip"
+          $hash = (Get-FileHash "dist/$asset.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $asset.zip" | Set-Content "dist/$asset.zip.sha256" -Encoding ascii
+      - name: Upload assets to draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release edit "${GITHUB_REF_NAME}" --draft=false

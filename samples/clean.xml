@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">
+  <channel>
+    <title>Northwind Outfitters</title>
+    <link>https://northwind.example/</link>
+    <description>Quality outdoor gear</description>
+    <item>
+      <g:id>NW-1001</g:id>
+      <title>Trailhead 30L Hiking Backpack</title>
+      <description>A durable 30-liter pack with a ventilated back panel and rain cover, built for multi-day treks.</description>
+      <link>https://northwind.example/p/trailhead-30l</link>
+      <g:image_link>https://cdn.northwind.example/img/nw-1001.jpg</g:image_link>
+      <g:availability>in_stock</g:availability>
+      <g:price>129.99 USD</g:price>
+      <g:brand>Northwind</g:brand>
+      <g:gtin>4006381333931</g:gtin>
+      <g:condition>new</g:condition>
+      <g:google_product_category>Sporting Goods &gt; Outdoor Recreation &gt; Camping &amp; Hiking</g:google_product_category>
+    </item>
+    <item>
+      <g:id>NW-1002</g:id>
+      <title>Summit Insulated Water Bottle 750ml</title>
+      <description>Double-walled stainless steel bottle that keeps drinks cold for 24 hours or hot for 12.</description>
+      <link>https://northwind.example/p/summit-bottle</link>
+      <g:image_link>https://cdn.northwind.example/img/nw-1002.jpg</g:image_link>
+      <g:availability>in_stock</g:availability>
+      <g:price>34.99 USD</g:price>
+      <g:brand>Northwind</g:brand>
+      <g:gtin>012345678905</g:gtin>
+      <g:condition>new</g:condition>
+      <g:google_product_category>Sporting Goods &gt; Outdoor Recreation</g:google_product_category>
+    </item>
+    <item>
+      <g:id>NW-1003</g:id>
+      <title>Camp Stove Fuel Canister</title>
+      <description>Isobutane-propane fuel canister compatible with most backpacking stoves. 230g net weight.</description>
+      <link>https://northwind.example/p/fuel-canister</link>
+      <g:image_link>https://cdn.northwind.example/img/nw-1003.jpg</g:image_link>
+      <g:availability>in_stock</g:availability>
+      <g:price>8.99 USD</g:price>
+      <g:brand>Northwind</g:brand>
+      <g:gtin>0712345678904</g:gtin>
+      <g:condition>new</g:condition>
+      <g:google_product_category>Sporting Goods &gt; Outdoor Recreation &gt; Camping &amp; Hiking</g:google_product_category>
+    </item>
+  </channel>
+</rss>

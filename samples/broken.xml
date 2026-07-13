@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">
+  <channel>
+    <title>Bargain Bin Store</title>
+    <link>https://bargain.example/</link>
+    <description>Deals deals deals</description>
+    <item>
+      <g:id>BB-1</g:id>
+      <title>PREMIUM STAINLESS STEEL WATER BOTTLE 32OZ BPA FREE</title>
+      <description>&lt;p&gt;Keep your drinks cold!&lt;/p&gt;&lt;br&gt;&lt;b&gt;Best price&lt;/b&gt; guaranteed!&lt;/p&gt;</description>
+      <link>https://bargain.example/p/bottle</link>
+      <g:image_link>https://cdn.bargain.example/bottle.jpg</g:image_link>
+      <g:availability>In Stock</g:availability>
+      <g:price>19.9 usd</g:price>
+      <g:condition>Brand New</g:condition>
+    </item>
+    <item>
+      <g:id>BB-2</g:id>
+      <link>https://bargain.example/p/mystery</link>
+      <g:image_link>https://cdn.bargain.example/mystery.jpg</g:image_link>
+      <g:availability>available</g:availability>
+      <g:price>$29.99</g:price>
+      <g:brand>Generic</g:brand>
+      <g:gtin>1234567890</g:gtin>
+    </item>
+    <item>
+      <g:id>BB-3</g:id>
+      <title>Womens Running Shoes Lightweight Breathable</title>
+      <description>Comfortable running shoes for everyday training and racing on road or track surfaces.</description>
+      <link>https://bargain.example/p/shoes</link>
+      <g:image_link>https://placeholder.example/no-image.png</g:image_link>
+      <g:availability>in_stock</g:availability>
+      <g:price>59.99 USD</g:price>
+      <g:brand>RunFast</g:brand>
+      <g:gtin>0712345678904</g:gtin>
+      <g:google_product_category>Apparel &amp; Accessories &gt; Shoes</g:google_product_category>
+    </item>
+    <item>
+      <g:id>BB-4</g:id>
+      <title>  Wireless   Earbuds   Bluetooth  </title>
+      <description>True wireless earbuds with charging case and noise isolation for calls and music.</description>
+      <link>not-a-real-url</link>
+      <g:image_link>https://cdn.bargain.example/earbuds.jpg</g:image_link>
+      <g:availability>preorder</g:availability>
+      <g:price>0 USD</g:price>
+      <g:brand>SoundCore</g:brand>
+      <g:mpn>SC-EB-100</g:mpn>
+    </item>
+    <item>
+      <g:id>DUP-9</g:id>
+      <title>Phone Case Clear Silicone</title>
+      <description>Slim transparent silicone case offering scratch protection and a secure grip.</description>
+      <link>https://bargain.example/p/case-a</link>
+      <g:image_link>https://cdn.bargain.example/case-a.jpg</g:image_link>
+      <g:availability>in_stock</g:availability>
+      <g:price>9.99 EUR</g:price>
+      <g:brand>CaseCo</g:brand>
+      <g:gtin>4006381333931</g:gtin>
+      <g:item_group_id>CASE-GRP</g:item_group_id>
+      <g:color>Clear</g:color>
+    </item>
+    <item>
+      <g:id>DUP-9</g:id>
+      <title>Phone Case Black Silicone</title>
+      <description>Slim black silicone case offering scratch protection and a secure grip for daily use.</description>
+      <link>https://bargain.example/p/case-b</link>
+      <g:image_link>https://cdn.bargain.example/case-b.jpg</g:image_link>
+      <g:availability>in_stock</g:availability>
+      <g:price>9.99 EUR</g:price>
+      <g:brand>CaseCo</g:brand>
+      <g:gtin>4006381333931</g:gtin>
+      <g:item_group_id>CASE-GRP</g:item_group_id>
+    </item>
+  </channel>
+</rss>

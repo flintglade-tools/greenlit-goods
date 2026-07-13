@@ -1,0 +1,24 @@
+[package]
+name = "greenlit-cli"
+description = "A local CLI for auditing and conservatively repairing Google Merchant Center product feeds."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "../README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "greenlit"
+path = "src/main.rs"
+
+[dependencies]
+greenlit-engine = { path = "../engine" }
+clap = { version = "=4.4.18", features = ["derive"] }
+anyhow = "1.0.103"
+serde_json = "1.0"
+tempfile = "3.20"

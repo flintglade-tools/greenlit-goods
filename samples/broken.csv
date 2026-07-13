@@ -1,0 +1,5 @@
+id,title,description,link,image_link,availability,price,condition,brand,gtin
+CS-1,Bluetooth Speaker Portable,"<p>Loud and clear sound</p> for parties and outdoor use with deep bass.",https://shop.example/p/speaker,https://cdn.shop.example/speaker.jpg,In Stock,24.9 USD,USED,Acme,4006381333931
+CS-2,,"Missing the title field entirely but has a long enough description to pass that check.",https://shop.example/p/nameless,https://cdn.shop.example/x.jpg,in_stock,15.00 USD,new,Acme,99999
+CS-3,Desk Lamp LED Adjustable,"Adjustable LED desk lamp with three brightness levels and a USB charging port.",https://shop.example/p/lamp,https://cdn.shop.example/lamp.jpg,in stock,39.99 USD,new,Lumos,0712345678904,EXTRA_RAGGED_FIELD
+CS-4,Notebook A5 Dotted,"Short.",https://shop.example/p/notebook,https://cdn.shop.example/notebook.jpg,in_stock,12.00 USD,new,PaperCo,012345678905
