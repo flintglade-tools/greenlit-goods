@@ -25,6 +25,28 @@ jobs:
       - run: cargo test --workspace --locked
       - run: cargo build --workspace --release --locked
 
+  action-contract:
+    name: Action contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Verify entrypoint contract
+        run: ./action/tests/entrypoint_test.sh
+      - name: Audit a clean feed through the Docker action
+        uses: ./
+        with:
+          feed: samples/clean.xml
+      - name: Reject a broken feed in strict mode
+        id: broken_feed
+        continue-on-error: true
+        uses: ./
+        with:
+          feed: samples/broken.xml
+      - name: Verify strict failure reached the workflow
+        env:
+          OUTCOME: ${{ steps.broken_feed.outcome }}
+        run: test "$OUTCOME" = failure
+
   audit:
     name: RustSec audit
     runs-on: ubuntu-latest

@@ -1,12 +1,15 @@
 # Greenlit Goods
 
+[![CI](https://github.com/flintglade-tools/greenlit-goods/actions/workflows/ci.yml/badge.svg)](https://github.com/flintglade-tools/greenlit-goods/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/flintglade-tools/greenlit-goods)](https://github.com/flintglade-tools/greenlit-goods/releases/latest)
+
 Greenlit Goods is a local Rust CLI and library for auditing Google Merchant Center product feeds. It reads RSS/XML and delimited text, explains checkable feed problems, and can make a deliberately small set of deterministic repairs.
 
 This release is an independent feed preflight tool. It is not affiliated with Google, does not call Google services, and cannot predict account-, landing-page-, image-, policy-, or crawl-dependent decisions.
 
 ## Release status
 
-Version `0.1.1` is ready for local CLI/library use within the support boundary below. JSON output is versioned with `schema_version: 1`; incompatible JSON changes require a schema-version change.
+Version `0.1.1` is the current published CLI/library release. The `0.2.0` development line adds the same offline auditor as a GitHub Action; it becomes consumable from a stable tag after that release is published. JSON output is versioned with `schema_version: 1`; incompatible JSON changes require a schema-version change.
 
 The implementation was verified with Rust 1.96.1. The manifest requires Rust 1.96 or newer.
 
@@ -28,6 +31,12 @@ target/release/greenlit fix feed.xml --output feed.fixed.xml
 
 On Windows the binary is `target\release\greenlit.exe`.
 
+Prebuilt, checksum-paired Linux x86_64, macOS arm64/x86_64, and Windows x86_64 archives are available from [GitHub Releases](https://github.com/flintglade-tools/greenlit-goods/releases). Verify the adjacent `.sha256` file before running an archive; for example:
+
+```console
+sha256sum -c greenlit-v0.1.1-linux-x86_64.tar.gz.sha256
+```
+
 Useful options:
 
 - `--country US` selects the two-letter target country used by conditional rules.
@@ -38,6 +47,47 @@ Useful options:
 - `--no-color` disables ANSI styling.
 
 Exit codes are stable for v0.1: `0` for a completed command, `1` for an audit `--strict` failure, and `2` for invalid arguments, unreadable input, unsafe rewrite, or another command error.
+
+## GitHub Action
+
+Releases containing the root `action.yml` (starting with `v0.2.0`) can audit a feed as a Linux CI gate. The action builds and runs the CLI at the selected action ref in an isolated Docker image. Building the image pulls the pinned base images and locked Rust dependencies; the auditor itself makes no network requests after launch and needs no secrets or write permissions.
+
+```yaml
+name: Product feed
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-feed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: flintglade-tools/greenlit-goods@v0.2.0
+        with:
+          feed: path/to/products.xml
+          country: US
+          destination: shopping-ads
+```
+
+Inputs:
+
+| Input | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `feed` | yes | — | Repository-relative path to an RSS/XML, CSV, or TSV feed |
+| `format` | no | auto-detect | Optional `xml` or `csv` override |
+| `country` | no | `US` | Two-letter target country for conditional rules |
+| `destination` | no | `shopping-ads` | `shopping-ads` or `free-listings` |
+| `assumed-monthly-sales` | no | `1` | Explicit revenue-at-risk assumption |
+| `strict` | no | `true` | Fail on red products or incomplete input |
+| `json` | no | `false` | Emit the schema-versioned JSON report |
+
+The action has no outputs, secrets, or environment-variable requirements. Set `strict: "false"` for report-only use. Use `format` only when detection is not suitable.
+
+Docker actions run on Linux runners. macOS and Windows users can use the release archives or build the CLI locally. For supply-chain-sensitive workflows, pin the action to a reviewed full commit SHA instead of a movable tag.
 
 ## What is checked
 

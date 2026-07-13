@@ -175,7 +175,7 @@ dependencies = [
 
 [[package]]
 name = "greenlit-cli"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -186,7 +186,7 @@ dependencies = [
 
 [[package]]
 name = "greenlit-engine"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "csv",
  "encoding_rs",

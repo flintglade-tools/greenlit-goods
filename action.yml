@@ -1,0 +1,48 @@
+name: Greenlit Goods Feed Audit
+description: Audit Google Merchant Center product feeds and fail CI on feed-local disapproval risks.
+author: Flintglade
+
+inputs:
+  feed:
+    description: Path to the RSS/XML, CSV, or TSV product feed in the checked-out repository.
+    required: true
+  format:
+    description: Optional format override (xml or csv). By default the format is detected.
+    required: false
+    default: ""
+  country:
+    description: Two-letter target country used by conditional rules.
+    required: false
+    default: US
+  destination:
+    description: Google destination to audit (shopping-ads or free-listings).
+    required: false
+    default: shopping-ads
+  assumed-monthly-sales:
+    description: Assumed monthly unit sales per affected product for the labeled risk estimate.
+    required: false
+    default: "1"
+  strict:
+    description: Fail the step when products are red or the input is incomplete.
+    required: false
+    default: "true"
+  json:
+    description: Emit the schema-versioned JSON report instead of the human report.
+    required: false
+    default: "false"
+
+runs:
+  using: docker
+  image: Dockerfile
+  args:
+    - ${{ inputs.feed }}
+    - ${{ inputs.format }}
+    - ${{ inputs.country }}
+    - ${{ inputs.destination }}
+    - ${{ inputs.assumed-monthly-sales }}
+    - ${{ inputs.strict }}
+    - ${{ inputs.json }}
+
+branding:
+  icon: check-circle
+  color: green
