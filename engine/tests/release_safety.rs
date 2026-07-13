@@ -5,7 +5,7 @@ use greenlit_engine::{audit_auto, fix_auto, AuditOptions, FixOptions};
 
 fn product(extra: &str) -> String {
     format!(
-        r#"<rss xmlns:g="http://base.google.com/ns/1.0"><channel><title>Store</title>
+        r#"<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel><title>Store</title>
         <item><g:id>P1</g:id><title>A sufficiently descriptive product title</title>
         <description>A sufficiently long and accurate product description for testing.</description>
         <link>https://shop.example/products/p1</link>
@@ -140,4 +140,65 @@ fn parser_limits_depth_attributes_and_field_size() {
         greenlit_engine::parse::parse(xml.as_bytes(), Format::Xml),
         Err(EngineError::Limit(_))
     ));
+}
+
+#[test]
+fn malformed_xml_attributes_are_fatal_and_never_rewritten() {
+    let malformed_root = product("").replace(
+        "<rss xmlns:g=\"http://base.google.com/ns/1.0\" version=\"2.0\">",
+        "<rss xmlns:g=\"http://base.google.com/ns/1.0\" version=\"2.0\" malformed=unquoted>",
+    );
+    let malformed_product = product("").replace("<g:brand>", "<g:brand malformed=unquoted>");
+
+    for xml in [malformed_root, malformed_product] {
+        assert!(matches!(
+            audit_auto(xml.as_bytes(), &AuditOptions::default()),
+            Err(EngineError::Xml(_))
+        ));
+        assert!(matches!(
+            fix_auto(xml.as_bytes(), &FixOptions::default()),
+            Err(EngineError::Xml(_))
+        ));
+    }
+}
+
+#[test]
+fn unsupported_rss_shapes_are_auditable_but_never_rewritten() {
+    let base = product("");
+    let cases = [
+        base.replace(" version=\"2.0\"", ""),
+        base.replace("<title>Store</title>", "<title custom=\"keep\">Store</title>"),
+        base.replace("<item>", "<item href=\"keep\">"),
+        base.replace(
+            "<title>A sufficiently descriptive product title</title>",
+            "<title href=\"Product title via href\">A sufficiently descriptive product title</title>",
+        ),
+        base.replace(
+            "<link>https://shop.example/products/p1</link>",
+            "<link href=\"https://shop.example/products/p1\"/>",
+        ),
+        base.replace("<channel>", "<channel>stray envelope text"),
+        base.replace(
+            "<title>Store</title>",
+            "<title>Store</title><title>Replacement</title>",
+        ),
+        base.replace(
+            "</channel></rss>",
+            "</channel><channel><title>Other</title></channel></rss>",
+        ),
+        base.replace("<channel><title>Store</title>", "").replace("</channel>", ""),
+        base.replace(
+            "<description>A sufficiently long and accurate product description for testing.</description>",
+            "<description><![CDATA[valid\u{1}invalid]]></description>",
+        ),
+    ];
+
+    for xml in cases {
+        let report = audit_auto(xml.as_bytes(), &AuditOptions::default()).unwrap();
+        assert!(!report.rewrite_safe, "unexpected rewrite-safe XML: {xml}");
+        assert!(matches!(
+            fix_auto(xml.as_bytes(), &FixOptions::default()),
+            Err(EngineError::UnsafeRewrite(_))
+        ));
+    }
 }

@@ -39,6 +39,58 @@ fn structured_description_satisfies_required_description() {
 }
 
 #[test]
+fn structured_title_satisfies_required_title() {
+    let xml = product("").replace(
+        "<title>A sufficiently descriptive product title</title>",
+        "<g:structured_title>default:A sufficiently descriptive product title</g:structured_title>",
+    );
+    let report = audit(&xml, "US", Destination::ShoppingAds);
+    assert!(!report
+        .findings
+        .iter()
+        .any(|finding| finding.rule_id == "GL-REQ-title"));
+}
+
+#[test]
+fn missing_title_and_structured_title_is_disapproved() {
+    let xml = product("").replace(
+        "<title>A sufficiently descriptive product title</title>",
+        "",
+    );
+    let report = audit(&xml, "US", Destination::ShoppingAds);
+    assert!(report
+        .findings
+        .iter()
+        .any(|finding| finding.rule_id == "GL-REQ-title"));
+}
+
+#[test]
+fn structured_attribute_wrappers_do_not_count_toward_content_limits() {
+    let structured_title = format!(
+        "<g:structured_title>default:\"{}\"</g:structured_title>",
+        "T".repeat(150)
+    );
+    let structured_description = format!(
+        "<g:structured_description>default:\"{}\"</g:structured_description>",
+        "D".repeat(5000)
+    );
+    let xml = product("")
+        .replace(
+            "<title>A sufficiently descriptive product title</title>",
+            &structured_title,
+        )
+        .replace(
+            "<description>A sufficiently long and accurate product description for testing.</description>",
+            &structured_description,
+        );
+    let report = audit(&xml, "US", Destination::ShoppingAds);
+    assert!(!report.findings.iter().any(|finding| {
+        finding.rule_id == "GL-LEN-structured_title"
+            || finding.rule_id == "GL-LEN-structured_description"
+    }));
+}
+
+#[test]
 fn current_size_type_values_are_accepted() {
     for value in ["regular", "petite", "maternity", "big", "tall", "plus"] {
         let xml = product(&format!("<g:size_type>{value}</g:size_type>"));

@@ -11,6 +11,7 @@ use crate::finding::{Finding, Severity};
 use crate::model::{canonical_attr, Feed, Format, Product};
 use crate::parse::decode_lenient;
 use crate::parse::{MAX_FIELD_BYTES, MAX_PRODUCTS};
+use std::collections::{HashMap, HashSet};
 
 pub fn parse_csv(bytes: &[u8]) -> Result<Feed> {
     let (text, enc_finding) = decode_lenient(bytes);
@@ -47,6 +48,8 @@ pub fn parse_csv(bytes: &[u8]) -> Result<Feed> {
     }
     feed.csv_columns = headers.clone();
     feed.csv_header_labels = headers.iter().cloned().zip(source_headers).collect();
+    let mut used_keys: HashSet<String> = headers.iter().cloned().collect();
+    let mut extra_keys: HashMap<usize, String> = HashMap::new();
 
     let mut record_no = 0u64;
     for result in reader.records() {
@@ -98,10 +101,17 @@ pub fn parse_csv(bytes: &[u8]) -> Result<Feed> {
                     value.len()
                 )));
             }
-            let key = headers
-                .get(i)
-                .cloned()
-                .unwrap_or_else(|| format!("extra_field_{}", i + 1));
+            let key = match headers.get(i) {
+                Some(key) => key.clone(),
+                None => match extra_keys.get(&i) {
+                    Some(key) => key.clone(),
+                    None => {
+                        let key = unique_key(&format!("extra_field_{}", i + 1), &mut used_keys);
+                        extra_keys.insert(i, key.clone());
+                        key
+                    }
+                },
+            };
             p.set(key, value.to_string());
         }
         if !p.is_empty() {
@@ -160,22 +170,47 @@ fn sniff_delimiter(text: &str) -> u8 {
 
 /// Ensure header names are unique by suffixing collisions (`color`, `color_2`).
 fn dedup_headers(headers: Vec<String>) -> Vec<String> {
-    use std::collections::HashMap;
-    let mut seen: HashMap<String, usize> = HashMap::new();
-    let mut out = Vec::with_capacity(headers.len());
-    for h in headers {
-        let h = if h.is_empty() {
-            "column".to_string()
-        } else {
-            h
-        };
-        let count = seen.entry(h.clone()).or_insert(0);
-        *count += 1;
-        if *count == 1 {
-            out.push(h);
-        } else {
-            out.push(format!("{h}_{}", *count));
+    let bases: Vec<String> = headers
+        .into_iter()
+        .map(|header| {
+            if header.is_empty() {
+                "column".to_string()
+            } else {
+                header
+            }
+        })
+        .collect();
+    let reserved: HashSet<String> = bases.iter().cloned().collect();
+    let mut used = HashSet::new();
+    let mut out = Vec::with_capacity(bases.len());
+    for base in bases {
+        if used.insert(base.clone()) {
+            out.push(base);
+            continue;
+        }
+        let mut suffix = 2usize;
+        loop {
+            let candidate = format!("{base}_{suffix}");
+            suffix += 1;
+            if !reserved.contains(&candidate) && used.insert(candidate.clone()) {
+                out.push(candidate);
+                break;
+            }
         }
     }
     out
+}
+
+fn unique_key(base: &str, used: &mut HashSet<String>) -> String {
+    if used.insert(base.to_string()) {
+        return base.to_string();
+    }
+    let mut suffix = 2usize;
+    loop {
+        let candidate = format!("{base}_{suffix}");
+        suffix += 1;
+        if used.insert(candidate.clone()) {
+            return candidate;
+        }
+    }
 }

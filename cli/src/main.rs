@@ -291,6 +291,9 @@ fn parse_assumed_sales(raw: &str) -> std::result::Result<f64, String> {
     if !value.is_finite() || value < 0.0 {
         return Err("must be finite and non-negative".to_string());
     }
+    if value > greenlit_engine::MAX_ASSUMED_MONTHLY_SALES {
+        return Err("is too large to keep revenue calculations finite".to_string());
+    }
     Ok(value)
 }
 

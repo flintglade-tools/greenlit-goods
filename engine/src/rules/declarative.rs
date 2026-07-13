@@ -32,9 +32,18 @@ const SPECS: &[FieldSpec] = &[
     },
     FieldSpec {
         attr: "title",
-        required: true,
+        required: false,
         missing_severity: Severity::Disapproval,
         max_len: Some(150),
+        allowed: None,
+    },
+    FieldSpec {
+        attr: "structured_title",
+        required: false,
+        missing_severity: Severity::Disapproval,
+        // The limit applies to the content sub-attribute, not the serialized
+        // grouped value. Do not measure wrapper syntax as product copy.
+        max_len: None,
         allowed: None,
     },
     FieldSpec {
@@ -48,7 +57,9 @@ const SPECS: &[FieldSpec] = &[
         attr: "structured_description",
         required: false,
         missing_severity: Severity::Disapproval,
-        max_len: Some(5000),
+        // The limit applies to the content sub-attribute, not the serialized
+        // grouped value. Do not measure wrapper syntax as product copy.
+        max_len: None,
         allowed: None,
     },
     FieldSpec {
@@ -213,6 +224,17 @@ impl Rule for DeclarativeRule {
                     }
                 }
             }
+        }
+        if p.get("title").is_none() && p.get("structured_title").is_none() {
+            out.push(
+                Finding::new(
+                    "GL-REQ-title",
+                    Severity::Disapproval,
+                    "One of 'title' or 'structured_title' is required.",
+                )
+                .field("title")
+                .detail("Google accepts either title attribute."),
+            );
         }
         if p.get("description").is_none() && p.get("structured_description").is_none() {
             out.push(

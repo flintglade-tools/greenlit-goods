@@ -36,7 +36,7 @@ fn non_finite_scientific_and_malformed_prices_are_rejected() {
 #[test]
 fn invalid_audit_options_fail_before_reporting() {
     let xml = feed(&[("P1", "10.00 USD")]);
-    for value in [-1.0, f64::NAN, f64::INFINITY] {
+    for value in [-1.0, f64::NAN, f64::INFINITY, 1.0e308] {
         let options = AuditOptions {
             assumed_monthly_sales: value,
             ..AuditOptions::default()

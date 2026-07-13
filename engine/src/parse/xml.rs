@@ -16,7 +16,7 @@
 //!   finding, rather than throwing the whole feed away.
 
 use quick_xml::escape::resolve_xml_entity;
-use quick_xml::events::{BytesRef, BytesStart, BytesText, Event};
+use quick_xml::events::{BytesCData, BytesRef, BytesStart, BytesText, Event};
 use quick_xml::reader::Reader;
 
 use crate::error::{EngineError, Result};
@@ -56,6 +56,8 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
     let mut chan_depth = 0usize;
 
     let mut record_no = 0u64;
+    let mut seen_rss = false;
+    let mut seen_channel = false;
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -66,6 +68,10 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                 let parent = stack.last().map(String::as_str);
 
                 if stack.is_empty() && name == "rss" {
+                    if seen_rss {
+                        feed.block_rewrite("multiple RSS root elements cannot be rewritten safely");
+                    }
+                    seen_rss = true;
                     if !has_google_product_namespace(&e) {
                         feed.mark_incomplete(
                             "RSS root is missing the required Google product namespace declaration",
@@ -87,8 +93,19 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                             "attributes on the RSS root are outside the supported rewrite envelope",
                         );
                     }
+                    if !has_rss_version_2(&e) {
+                        feed.block_rewrite(
+                            "RSS root is missing version=\"2.0\"; rewriting would invent it",
+                        );
+                    }
                 } else if name == "channel" && parent == Some("rss") {
-                    if e.attributes().with_checks(false).next().is_some() {
+                    if seen_channel {
+                        feed.block_rewrite(
+                            "multiple <channel> elements cannot be rewritten safely",
+                        );
+                    }
+                    seen_channel = true;
+                    if e.attributes().next().is_some() {
                         feed.block_rewrite(
                             "attributes on <channel> are outside the supported rewrite envelope",
                         );
@@ -104,7 +121,16 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                             "Atom <entry> input is audit-only; rewriting emits RSS 2.0",
                         );
                     }
-                    if has_non_href_attributes(&e) {
+                    if name == "item" && parent != Some("channel") {
+                        feed.block_rewrite(
+                            "RSS <item> elements must be direct children of <channel>",
+                        );
+                    }
+                    if name == "item" && e.attributes().next().is_some() {
+                        feed.block_rewrite(
+                            "attributes on <item> are outside the supported rewrite envelope",
+                        );
+                    } else if name == "entry" && has_non_href_attributes(&e) {
                         feed.block_rewrite(format!(
                             "attributes on <{raw_name}> are not represented for rewriting"
                         ));
@@ -121,7 +147,13 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                     if let Some(reason) = unsupported_item_child(&raw_name, &name) {
                         feed.block_rewrite(reason);
                     }
-                    if has_non_href_attributes(&e) {
+                    let atom_href_link = parent == Some("entry") && name == "link";
+                    let unsupported_attributes = if atom_href_link {
+                        has_non_href_attributes(&e)
+                    } else {
+                        e.attributes().next().is_some()
+                    };
+                    if unsupported_attributes {
                         feed.block_rewrite(format!(
                             "attributes on product element <{raw_name}> are not represented"
                         ));
@@ -129,14 +161,30 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                     cap_attr = Some(name.clone());
                     cap_buf.clear();
                     cap_depth = stack.len();
-                    cap_href = get_href(&e);
+                    cap_href = atom_href_link.then(|| get_href(&e)).flatten();
                 } else if current.is_some() && cap_attr.is_some() {
                     feed.block_rewrite(format!(
                         "nested product structure inside '{}' is audit-only",
                         cap_attr.as_deref().unwrap_or("unknown")
                     ));
                 } else if current.is_none() && chan_field.is_none() && parent == Some("channel") {
+                    if e.attributes().next().is_some() {
+                        feed.block_rewrite(format!(
+                            "attributes on channel element <{raw_name}> are not represented"
+                        ));
+                    }
                     if let Some(f) = channel_field(&name) {
+                        let repeated = match f {
+                            "title" => feed.channel.title.is_some(),
+                            "link" => feed.channel.link.is_some(),
+                            "description" => feed.channel.description.is_some(),
+                            _ => false,
+                        };
+                        if repeated {
+                            feed.block_rewrite(format!(
+                                "repeated channel element <{raw_name}> cannot be rewritten safely"
+                            ));
+                        }
                         chan_field = Some(f);
                         chan_buf.clear();
                         chan_depth = stack.len();
@@ -164,15 +212,27 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                     if let Some(reason) = unsupported_item_child(&raw_name, &name) {
                         feed.block_rewrite(reason);
                     }
-                    if has_non_href_attributes(&e) {
+                    let atom_href_link = parent == Some("entry") && name == "link";
+                    let unsupported_attributes = if atom_href_link {
+                        has_non_href_attributes(&e)
+                    } else {
+                        e.attributes().next().is_some()
+                    };
+                    if unsupported_attributes {
                         feed.block_rewrite(format!(
                             "attributes on product element <{raw_name}> are not represented"
                         ));
                     }
                     // Atom links carry the URL in an href attribute.
-                    if let Some(href) = get_href(&e) {
-                        if let Some(reason) = store_attr(product, &name, href) {
-                            feed.block_rewrite(reason);
+                    if atom_href_link {
+                        if let Some(href) = get_href(&e) {
+                            if let Some(reason) = store_attr(product, &name, href) {
+                                feed.block_rewrite(reason);
+                            }
+                        } else {
+                            feed.block_rewrite(format!(
+                                "empty product element <{raw_name}/> is omitted during rewriting"
+                            ));
                         }
                     } else {
                         feed.block_rewrite(format!(
@@ -214,6 +274,10 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                 } else if chan_field.is_some() {
                     chan_buf.push_str(&t);
                     enforce_field_limit(&chan_buf)?;
+                } else if !t.trim().is_empty() {
+                    feed.block_rewrite(
+                        "non-whitespace XML envelope text is not represented for rewriting",
+                    );
                 }
             }
 
@@ -227,6 +291,10 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                         } else if chan_field.is_some() {
                             chan_buf.push_str(&text);
                             enforce_field_limit(&chan_buf)?;
+                        } else if !text.trim().is_empty() {
+                            feed.block_rewrite(
+                                "non-whitespace XML envelope text is not represented for rewriting",
+                            );
                         }
                     }
                     Err(error) => {
@@ -245,13 +313,32 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
             }
 
             Ok(Event::CData(e)) => {
-                let t = String::from_utf8_lossy(&e.into_inner()).into_owned();
+                let t = match decode_cdata(&e) {
+                    Ok(text) => text,
+                    Err(error) => {
+                        feed.mark_incomplete("XML CDATA contained invalid XML 1.0 text");
+                        feed.parse_findings.push(
+                            Finding::new(
+                                "GL-XML-CDATA",
+                                Severity::AtRisk,
+                                "XML CDATA contained invalid text and is incomplete.",
+                            )
+                            .detail(error)
+                            .structural(),
+                        );
+                        String::new()
+                    }
+                };
                 if cap_attr.is_some() {
                     cap_buf.push_str(&t);
                     enforce_field_limit(&cap_buf)?;
                 } else if chan_field.is_some() {
                     chan_buf.push_str(&t);
                     enforce_field_limit(&chan_buf)?;
+                } else if !t.trim().is_empty() {
+                    feed.block_rewrite(
+                        "non-whitespace XML envelope text is not represented for rewriting",
+                    );
                 }
             }
 
@@ -280,9 +367,11 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                     let field = chan_field.take().unwrap();
                     let value = std::mem::take(&mut chan_buf);
                     match field {
-                        "title" => feed.channel.title = Some(value),
-                        "link" => feed.channel.link = Some(value),
-                        "description" => feed.channel.description = Some(value),
+                        "title" if feed.channel.title.is_none() => feed.channel.title = Some(value),
+                        "link" if feed.channel.link.is_none() => feed.channel.link = Some(value),
+                        "description" if feed.channel.description.is_none() => {
+                            feed.channel.description = Some(value)
+                        }
                         _ => {}
                     }
                 }
@@ -355,6 +444,12 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
     if feed.products.is_empty() {
         return Err(EngineError::EmptyFeed);
     }
+    if !seen_rss {
+        feed.block_rewrite("an RSS root element is required for rewriting");
+    }
+    if !seen_channel {
+        feed.block_rewrite("exactly one RSS <channel> element is required for rewriting");
+    }
     Ok(feed)
 }
 
@@ -404,7 +499,12 @@ fn qname(e: &BytesStart) -> String {
 
 /// Read an element's `href` attribute, if any (used for Atom links).
 fn get_href(e: &BytesStart) -> Option<String> {
-    for attr in e.attributes().with_checks(false).flatten() {
+    // Every Start/Empty event is validated by `enforce_element_limits` before
+    // these helpers run, so an attribute error here would violate that invariant.
+    for attr in e
+        .attributes()
+        .map(|attr| attr.expect("XML attributes were validated before inspection"))
+    {
         if attr.key.as_ref() == b"href" {
             return Some(String::from_utf8_lossy(&attr.value).into_owned());
         }
@@ -414,22 +514,31 @@ fn get_href(e: &BytesStart) -> Option<String> {
 
 fn has_non_href_attributes(e: &BytesStart) -> bool {
     e.attributes()
-        .with_checks(false)
-        .flatten()
+        .map(|attr| attr.expect("XML attributes were validated before inspection"))
         .any(|attr| attr.key.as_ref() != b"href")
 }
 
 fn has_google_product_namespace(e: &BytesStart) -> bool {
-    e.attributes().with_checks(false).flatten().any(|attr| {
-        attr.key.as_ref() == b"xmlns:g" && attr.value.as_ref() == GOOGLE_PRODUCT_NAMESPACE
-    })
+    e.attributes()
+        .map(|attr| attr.expect("XML attributes were validated before inspection"))
+        .any(|attr| {
+            attr.key.as_ref() == b"xmlns:g" && attr.value.as_ref() == GOOGLE_PRODUCT_NAMESPACE
+        })
 }
 
 fn has_unsupported_rss_attributes(e: &BytesStart) -> bool {
-    e.attributes().with_checks(false).flatten().any(|attr| {
-        let key = attr.key.as_ref();
-        key != b"xmlns:g" && !(key == b"version" && attr.value.as_ref() == b"2.0")
-    })
+    e.attributes()
+        .map(|attr| attr.expect("XML attributes were validated before inspection"))
+        .any(|attr| {
+            let key = attr.key.as_ref();
+            key != b"xmlns:g" && !(key == b"version" && attr.value.as_ref() == b"2.0")
+        })
+}
+
+fn has_rss_version_2(e: &BytesStart) -> bool {
+    e.attributes()
+        .map(|attr| attr.expect("XML attributes were validated before inspection"))
+        .any(|attr| attr.key.as_ref() == b"version" && attr.value.as_ref() == b"2.0")
 }
 
 fn unsupported_item_child(raw_name: &str, canonical_name: &str) -> Option<String> {
@@ -448,9 +557,34 @@ fn unsupported_item_child(raw_name: &str, canonical_name: &str) -> Option<String
 }
 
 fn decode_text(text: &BytesText<'_>) -> std::result::Result<String, String> {
-    text.xml10_content()
+    let value = text
+        .xml10_content()
         .map(|value| value.into_owned())
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+    validate_xml10_text(value)
+}
+
+fn decode_cdata(cdata: &BytesCData<'_>) -> std::result::Result<String, String> {
+    let value = cdata
+        .xml10_content()
+        .map(|value| value.into_owned())
+        .map_err(|error| error.to_string())?;
+    validate_xml10_text(value)
+}
+
+fn validate_xml10_text(value: String) -> std::result::Result<String, String> {
+    if let Some(character) = value.chars().find(|character| {
+        !matches!(
+            *character,
+            '\u{9}' | '\u{A}' | '\u{D}' | '\u{20}'..='\u{D7FF}' | '\u{E000}'..='\u{10FFFF}'
+        )
+    }) {
+        return Err(format!(
+            "invalid XML 1.0 character U+{:04X}",
+            character as u32
+        ));
+    }
+    Ok(value)
 }
 
 fn resolve_reference(reference: &BytesRef<'_>) -> std::result::Result<String, String> {
@@ -458,12 +592,13 @@ fn resolve_reference(reference: &BytesRef<'_>) -> std::result::Result<String, St
         .resolve_char_ref()
         .map_err(|error| error.to_string())?
     {
-        return Ok(ch.to_string());
+        return validate_xml10_text(ch.to_string());
     }
     let name = reference.decode().map_err(|error| error.to_string())?;
-    resolve_xml_entity(&name)
+    let value = resolve_xml_entity(&name)
         .map(str::to_string)
-        .ok_or_else(|| format!("unrecognized XML entity '&{name};'"))
+        .ok_or_else(|| format!("unrecognized XML entity '&{name};'"))?;
+    validate_xml10_text(value)
 }
 
 fn enforce_element_limits(element: &BytesStart<'_>, depth: usize) -> Result<()> {
@@ -472,15 +607,13 @@ fn enforce_element_limits(element: &BytesStart<'_>, depth: usize) -> Result<()> 
             "XML nesting exceeds {MAX_XML_DEPTH} elements"
         )));
     }
-    let count = element
-        .attributes()
-        .with_checks(false)
-        .take(MAX_ATTRIBUTES_PER_ELEMENT + 1)
-        .count();
-    if count > MAX_ATTRIBUTES_PER_ELEMENT {
-        return Err(EngineError::Limit(format!(
-            "XML element has more than {MAX_ATTRIBUTES_PER_ELEMENT} attributes"
-        )));
+    for (index, attribute) in element.attributes().enumerate() {
+        attribute.map_err(|error| EngineError::Xml(format!("invalid XML attribute: {error}")))?;
+        if index >= MAX_ATTRIBUTES_PER_ELEMENT {
+            return Err(EngineError::Limit(format!(
+                "XML element has more than {MAX_ATTRIBUTES_PER_ELEMENT} attributes"
+            )));
+        }
     }
     Ok(())
 }

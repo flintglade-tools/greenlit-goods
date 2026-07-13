@@ -1,6 +1,8 @@
 # Product specification support
 
-Last verified: 2026-07-04
+Last full verification: 2026-07-04
+
+Structured title and structured description requirements rechecked: 2026-07-13
 
 Primary sources:
 
@@ -13,7 +15,7 @@ Primary sources:
 
 | Area | Coverage | Boundary |
 |---|---|---|
-| Required attributes | `id`, title, description or structured description, link, image, availability, price | Feed-local presence and documented length checks |
+| Required attributes | `id`, title or structured title, description or structured description, link, image, availability, price | Feed-local presence checks; length checks cover plain title/description, while grouped alternatives are presence-only until their sub-attributes are parsed |
 | Enumerations | condition, availability, gender, age group, size type, adult, bundle, identifier flags | Known documented values and safe canonical variants |
 | Prices | Exact non-negative amount with at most two decimals and a current ISO 4217 alphabetic code | No symbols, historical codes, currency-first forms, exponents, inferred currency, market/country currency matching, tax, or exchange rates |
 | Identifiers | GTIN-8/12/13/14 checksum, brand/MPN combination, identifier opt-out | Does not query registries or validate brand ownership |

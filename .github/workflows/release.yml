@@ -5,67 +5,142 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
+  verify:
+    name: Release verification
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo build --workspace --release --locked
+
+  audit:
+    name: RustSec audit
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      checks: write
+      issues: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  prepare:
+    needs: [verify, audit]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
       - name: Verify tag matches Cargo version
         shell: bash
         run: |
           version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)
           test "v${version}" = "${GITHUB_REF_NAME}"
-      - name: Create draft release
+          git config gpg.ssh.allowedSignersFile "${GITHUB_WORKSPACE}/.github/allowed_signers"
+          git verify-tag "${GITHUB_REF_NAME}"
+      - name: Create draft release if missing
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" --draft --generate-notes --verify-tag
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" --draft --generate-notes --verify-tag
+          fi
 
   build:
     needs: prepare
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            label: linux
-          - os: macos-latest
-            label: macos
-          - os: windows-latest
-            label: windows
+          - os: ubuntu-24.04
+            label: linux-x86_64
+            expected_arch: x86_64
+          - os: macos-15
+            label: macos-arm64
+            expected_arch: arm64
+          - os: macos-15-intel
+            label: macos-x86_64
+            expected_arch: x86_64
+          - os: windows-2025
+            label: windows-x86_64
+            expected_arch: AMD64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Verify Unix runner architecture
+        if: runner.os != 'Windows'
+        shell: bash
+        run: test "$(uname -m)" = "${{ matrix.expected_arch }}"
+      - name: Verify Windows runner architecture
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($env:PROCESSOR_ARCHITECTURE -ne "${{ matrix.expected_arch }}") {
+            throw "Expected ${{ matrix.expected_arch }}, got $env:PROCESSOR_ARCHITECTURE"
+          }
       - run: cargo test --workspace --locked
       - run: cargo build --workspace --release --locked
-      - name: Package Unix binary
+      - name: Smoke-test binary
+        if: runner.os != 'Windows'
+        shell: bash
+        run: target/release/greenlit --version
+      - name: Smoke-test Windows binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: target/release/greenlit.exe --version
+      - name: Package Unix release
         if: runner.os != 'Windows'
         shell: bash
         run: |
           asset="greenlit-${GITHUB_REF_NAME}-${{ matrix.label }}"
-          mkdir dist
-          tar -czf "dist/${asset}.tar.gz" -C target/release greenlit
-          shasum -a 256 "dist/${asset}.tar.gz" > "dist/${asset}.tar.gz.sha256"
-      - name: Package Windows binary
+          stage="dist/${asset}"
+          mkdir -p "${stage}"
+          cp target/release/greenlit "${stage}/"
+          cp README.md LICENSE CHANGELOG.md SECURITY.md THIRD_PARTY_NOTICES.md "${stage}/"
+          tar -czf "dist/${asset}.tar.gz" -C dist "${asset}"
+          rm -rf "${stage}"
+          (cd dist && shasum -a 256 "${asset}.tar.gz" > "${asset}.tar.gz.sha256")
+      - name: Package Windows release
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $asset = "greenlit-$env:GITHUB_REF_NAME-${{ matrix.label }}"
-          New-Item -ItemType Directory -Path dist
-          Compress-Archive -Path target/release/greenlit.exe -DestinationPath "dist/$asset.zip"
+          $stage = "dist/$asset"
+          New-Item -ItemType Directory -Path $stage
+          Copy-Item target/release/greenlit.exe, README.md, LICENSE, CHANGELOG.md, SECURITY.md, THIRD_PARTY_NOTICES.md -Destination $stage
+          Compress-Archive -Path $stage -DestinationPath "dist/$asset.zip"
           $hash = (Get-FileHash "dist/$asset.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $asset.zip" | Set-Content "dist/$asset.zip.sha256" -Encoding ascii
-      - name: Upload assets to draft release
+      - name: Upload assets to release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${GITHUB_REF_NAME}" dist/*
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
 
   publish:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - name: Publish complete release
         env:

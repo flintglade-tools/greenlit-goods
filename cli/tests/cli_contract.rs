@@ -50,6 +50,20 @@ fn invalid_cli_value_is_usage_error() {
 }
 
 #[test]
+fn overflowing_revenue_assumption_is_a_usage_error() {
+    let output = run(greenlit().args([
+        "audit",
+        sample("broken.xml").to_str().unwrap(),
+        "--assumed-monthly-sales",
+        "1e308",
+        "--json",
+    ]));
+    assert_eq!(output.status.code(), Some(2));
+    assert!(text(&output.stderr).contains("too large"));
+    assert!(!text(&output.stdout).contains("null"));
+}
+
+#[test]
 fn fix_refuses_to_replace_an_existing_output() {
     let dir = tempfile::tempdir().unwrap();
     let output_path = dir.path().join("existing.xml");

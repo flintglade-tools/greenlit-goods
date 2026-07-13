@@ -61,7 +61,7 @@ fn structurally_empty_feeds_are_empty_feed_errors() {
 #[test]
 fn truncated_xml_recovers_when_a_product_was_already_parsed() {
     // First item closes cleanly; the second is cut off mid-stream.
-    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0"><channel>
+    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel>
       <item><g:id>A</g:id><title>Alpha</title><g:price>10.00 USD</g:price></item>
       <item><g:id>B</g:id><title>Beta</g:price"#;
     let feed = parse_auto(xml.as_bytes()).expect("should recover, not error");
@@ -161,6 +161,32 @@ fn csv_duplicate_headers_are_disambiguated_not_merged() {
 }
 
 #[test]
+fn csv_header_collisions_preserve_natural_and_blank_columns() {
+    let csv = "color,color_2,color\nred,native_second,blue\n";
+    let result = fix_auto(csv.as_bytes(), &FixOptions::default()).expect("fix");
+    let reparsed = parse_auto(&result.corrected_feed).expect("reparse");
+    assert_eq!(reparsed.products[0].get("color"), Some("red"));
+    assert_eq!(reparsed.products[0].get("color_2"), Some("native_second"));
+    assert_eq!(reparsed.products[0].get("color_3"), Some("blue"));
+
+    let blank = ",column,\nfirst,native,third\n";
+    let result = fix_auto(blank.as_bytes(), &FixOptions::default()).expect("fix");
+    let reparsed = parse_auto(&result.corrected_feed).expect("reparse");
+    assert_eq!(reparsed.products[0].get("column"), Some("first"));
+    assert_eq!(reparsed.products[0].get("column_2"), Some("native"));
+    assert_eq!(reparsed.products[0].get("column_3"), Some("third"));
+}
+
+#[test]
+fn csv_surplus_field_keys_never_overwrite_real_headers() {
+    let csv = "id,extra_field_3\nP1,original,surplus\n";
+    let result = fix_auto(csv.as_bytes(), &FixOptions::default()).expect("fix");
+    let reparsed = parse_auto(&result.corrected_feed).expect("reparse");
+    assert_eq!(reparsed.products[0].get("extra_field_3"), Some("original"));
+    assert_eq!(reparsed.products[0].get("extra_field_3_2"), Some("surplus"));
+}
+
+#[test]
 fn csv_rewrite_preserves_header_labels_order_and_duplicates() {
     let csv =
         "ID,Custom Field,color,color,Price,Availability\n1,value,Red,Blue,10.0 usd,In Stock\n";
@@ -216,7 +242,7 @@ fn non_utf8_bytes_fall_back_to_windows_1252_with_a_finding() {
 
 #[test]
 fn xml_round_trips_through_fix_serialize_reparse() {
-    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0"><channel>
+    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel>
       <item>
         <g:id>R1</g:id><title>Round Trip</title>
         <link>https://store.example/r1</link>
@@ -253,7 +279,7 @@ fn csv_round_trips_through_fix_serialize_reparse() {
 // Fixer safety & idempotence (the conservative-by-design contract)
 // ---------------------------------------------------------------------------
 
-const MESSY: &str = r#"<rss xmlns:g="http://base.google.com/ns/1.0"><channel>
+const MESSY: &str = r#"<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel>
   <item>
     <g:id>M1</g:id>
     <title>PREMIUM STAINLESS STEEL WATER BOTTLE 32OZ</title>
@@ -305,7 +331,7 @@ fn fixer_applies_only_safe_repairs() {
 #[test]
 fn fixer_never_invents_missing_identifiers_or_currency() {
     // No gtin/brand/mpn present, and a bare numeric price with no currency.
-    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0"><channel>
+    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel>
       <item><g:id>N1</g:id><title>No Identifiers Here</title>
         <link>https://store.example/n1</link><g:price>29.99</g:price></item>
     </channel></rss>"#;
@@ -344,7 +370,7 @@ fn description_internal_whitespace_is_preserved() {
 
 #[test]
 fn xml_boundary_whitespace_is_preserved_until_a_logged_fix() {
-    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0"><channel>
+    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel>
       <item><g:id>W1</g:id><title>  Kept title  </title>
       <g:custom_label_0>  preserve unknown  </g:custom_label_0></item>
     </channel></rss>"#;
@@ -370,7 +396,7 @@ fn xml_boundary_whitespace_is_preserved_until_a_logged_fix() {
 
 #[test]
 fn xml_rewrite_does_not_invent_missing_channel_metadata() {
-    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0"><channel>
+    let xml = r#"<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0"><channel>
       <item><g:id>M1</g:id><title>Product title</title></item>
     </channel></rss>"#;
     let result = fix_auto(xml.as_bytes(), &FixOptions::default()).expect("fix");
