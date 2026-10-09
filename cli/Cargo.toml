@@ -18,7 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 greenlit-engine = { path = "../engine" }
-clap = { version = "=4.4.18", features = ["derive"] }
+clap = { version = "4.6.2", features = ["derive"] }
 anyhow = "1.0.103"
 serde_json = "1.0"
 tempfile = "3.20"

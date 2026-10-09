@@ -8,14 +8,15 @@
 /// positives on bare `<` used as a less-than sign with a space after it.
 pub fn has_html(s: &str) -> bool {
     let bytes = s.as_bytes();
-    for i in 0..bytes.len() {
+    let Some(last_close) = bytes.iter().rposition(|&byte| byte == b'>') else {
+        return false;
+    };
+    for i in 0..last_close {
         if bytes[i] == b'<' {
             if let Some(&next) = bytes.get(i + 1) {
                 if next == b'/' || next.is_ascii_alphabetic() {
                     // Require a closing '>' somewhere after to look tag-like.
-                    if s[i..].contains('>') {
-                        return true;
-                    }
+                    return true;
                 }
             }
         }

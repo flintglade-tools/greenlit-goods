@@ -12,12 +12,20 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  RUSTUP_TOOLCHAIN: 1.96.1
+
 jobs:
   verify:
     name: Release verification
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust and lint components
+        run: rustup toolchain install 1.96.1 --profile minimal --component rustfmt --component clippy
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
@@ -26,24 +34,30 @@ jobs:
   audit:
     name: RustSec audit
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: read
-      checks: write
-      issues: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+      - name: Install pinned Rust and lint components
+        run: rustup toolchain install 1.96.1 --profile minimal --component rustfmt --component clippy
+      - name: Install locked advisory checker
+        run: cargo install cargo-audit --version 0.22.2 --locked
+      - name: Audit locked dependency graph
+        run: cargo audit
 
   prepare:
     needs: [verify, audit]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: Verify tag matches Cargo version
         shell: bash
@@ -83,8 +97,13 @@ jobs:
             label: windows-x86_64
             expected_arch: AMD64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust and lint components
+        run: rustup toolchain install 1.96.1 --profile minimal --component rustfmt --component clippy
       - name: Verify Unix runner architecture
         if: runner.os != 'Windows'
         shell: bash
@@ -140,6 +159,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
