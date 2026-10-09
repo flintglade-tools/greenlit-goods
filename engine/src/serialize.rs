@@ -7,6 +7,29 @@
 
 use crate::error::{EngineError, Result};
 use crate::model::{Feed, Format};
+use std::io::Write;
+
+pub const MAX_OUTPUT_BYTES: usize = 128 * 1024 * 1024;
+pub const MAX_OUTPUT_CELLS: usize = 16_000_000;
+
+#[derive(Default)]
+struct BoundedOutput(Vec<u8>);
+
+impl Write for BoundedOutput {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if self.0.len().saturating_add(bytes.len()) > MAX_OUTPUT_BYTES {
+            return Err(std::io::Error::other(
+                "corrected CSV exceeds the 128 MiB output limit",
+            ));
+        }
+        self.0.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
 
 /// Serialize a feed to bytes in its own format.
 pub fn serialize(feed: &Feed) -> Result<Vec<u8>> {
@@ -83,9 +106,18 @@ fn to_xml(feed: &Feed) -> String {
 /// CSV/TSV with the original delimiter and the full, stable column union.
 fn to_csv(feed: &Feed) -> Result<Vec<u8>> {
     let columns = feed.column_union();
+    if columns
+        .len()
+        .saturating_mul(feed.products.len().saturating_add(1))
+        > MAX_OUTPUT_CELLS
+    {
+        return Err(EngineError::Limit(format!(
+            "corrected CSV exceeds {MAX_OUTPUT_CELLS} rectangular cells"
+        )));
+    }
     let mut wtr = csv::WriterBuilder::new()
         .delimiter(feed.csv_delimiter)
-        .from_writer(Vec::new());
+        .from_writer(BoundedOutput::default());
 
     let header = columns
         .iter()
@@ -99,16 +131,14 @@ fn to_csv(feed: &Feed) -> Result<Vec<u8>> {
         .map_err(|e| EngineError::Serialize(e.to_string()))?;
 
     for p in &feed.products {
-        let row: Vec<String> = columns
-            .iter()
-            .map(|c| p.get_raw(c).unwrap_or("").to_string())
-            .collect();
+        let row: Vec<&str> = columns.iter().map(|c| p.get_raw(c).unwrap_or("")).collect();
         wtr.write_record(&row)
             .map_err(|e| EngineError::Serialize(e.to_string()))?;
     }
 
     wtr.flush().map_err(EngineError::Io)?;
     wtr.into_inner()
+        .map(|output| output.0)
         .map_err(|e| EngineError::Serialize(e.to_string()))
 }
 

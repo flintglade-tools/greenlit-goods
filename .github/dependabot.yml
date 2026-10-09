@@ -1,10 +1,17 @@
 version: 2
 updates:
   - package-ecosystem: cargo
-    directory: "/"
+    directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      compatible-dependencies:
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
-    directory: "/"
+    directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

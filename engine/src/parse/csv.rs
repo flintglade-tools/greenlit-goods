@@ -10,7 +10,9 @@ use crate::error::{EngineError, Result};
 use crate::finding::{Finding, Severity};
 use crate::model::{canonical_attr, Feed, Format, Product};
 use crate::parse::decode_lenient;
-use crate::parse::{MAX_FIELD_BYTES, MAX_PRODUCTS};
+use crate::parse::{
+    MAX_CSV_CELLS, MAX_CSV_COLUMNS, MAX_CSV_HEADER_BYTES, MAX_FIELD_BYTES, MAX_PRODUCTS,
+};
 use std::collections::{HashMap, HashSet};
 
 pub fn parse_csv(bytes: &[u8]) -> Result<Feed> {
@@ -33,7 +35,13 @@ pub fn parse_csv(bytes: &[u8]) -> Result<Feed> {
     // Canonicalize headers, disambiguating accidental duplicates so two distinct
     // source columns never silently merge.
     let source_headers: Vec<String> = match reader.headers() {
-        Ok(h) => h.iter().map(str::to_string).collect(),
+        Ok(h) => {
+            if h.len() > MAX_CSV_COLUMNS || h.iter().any(|value| value.len() > MAX_CSV_HEADER_BYTES)
+            {
+                return Err(EngineError::Limit(format!("CSV headers exceed {MAX_CSV_COLUMNS} columns or {MAX_CSV_HEADER_BYTES} bytes per label")));
+            }
+            h.iter().map(str::to_string).collect()
+        }
         Err(e) => return Err(EngineError::Csv(format!("could not read header row: {e}"))),
     };
     let headers = dedup_headers(
@@ -52,6 +60,7 @@ pub fn parse_csv(bytes: &[u8]) -> Result<Feed> {
     let mut extra_keys: HashMap<usize, String> = HashMap::new();
 
     let mut record_no = 0u64;
+    let mut cells = 0usize;
     for result in reader.records() {
         record_no += 1;
         let record = match result {
@@ -71,6 +80,12 @@ pub fn parse_csv(bytes: &[u8]) -> Result<Feed> {
             }
         };
 
+        cells = cells.saturating_add(record.len());
+        if record.len() > MAX_CSV_COLUMNS || cells > MAX_CSV_CELLS {
+            return Err(EngineError::Limit(format!(
+                "CSV exceeds {MAX_CSV_COLUMNS} fields per row or {MAX_CSV_CELLS} total cells"
+            )));
+        }
         // Flag, but do not drop, rows whose field count disagrees with the header.
         if record.len() != headers.len() {
             feed.parse_findings.push(
@@ -183,15 +198,16 @@ fn dedup_headers(headers: Vec<String>) -> Vec<String> {
     let reserved: HashSet<String> = bases.iter().cloned().collect();
     let mut used = HashSet::new();
     let mut out = Vec::with_capacity(bases.len());
+    let mut next_suffix: HashMap<String, usize> = HashMap::new();
     for base in bases {
         if used.insert(base.clone()) {
             out.push(base);
             continue;
         }
-        let mut suffix = 2usize;
+        let suffix = next_suffix.entry(base.clone()).or_insert(2);
         loop {
             let candidate = format!("{base}_{suffix}");
-            suffix += 1;
+            *suffix += 1;
             if !reserved.contains(&candidate) && used.insert(candidate.clone()) {
                 out.push(candidate);
                 break;

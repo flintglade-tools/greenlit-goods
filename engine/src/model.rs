@@ -88,6 +88,11 @@ impl Product {
         Some(&self.values[pos])
     }
 
+    pub(crate) fn get_raw_mut(&mut self, attr: &str) -> Option<&mut String> {
+        let pos = *self.index.get(&canonical_attr(attr))?;
+        Some(&mut self.values[pos])
+    }
+
     /// True if the attribute exists at all, even if blank.
     pub fn has(&self, attr: &str) -> bool {
         self.index.contains_key(&canonical_attr(attr))

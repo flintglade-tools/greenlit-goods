@@ -238,7 +238,7 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                     // Atom links carry the URL in an href attribute.
                     if atom_href_link {
                         if let Some(href) = get_href(&e, reader.decoder())? {
-                            if let Some(reason) = store_attr(product, &name, href) {
+                            if let Some(reason) = store_attr(product, &name, href)? {
                                 feed.block_rewrite(reason);
                             }
                         } else {
@@ -368,7 +368,7 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                     }
                     cap_href = None;
                     if let Some(p) = current.as_mut() {
-                        if let Some(reason) = store_attr(p, &attr, value) {
+                        if let Some(reason) = store_attr(p, &attr, value)? {
                             feed.block_rewrite(reason);
                         }
                     }
@@ -513,25 +513,34 @@ fn channel_field(name: &str) -> Option<&'static str> {
 }
 
 /// Store an attribute, honoring multivalue join semantics.
-fn store_attr(p: &mut Product, attr: &str, value: String) -> Option<String> {
+fn store_attr(p: &mut Product, attr: &str, value: String) -> Result<Option<String>> {
     if MULTIVALUE.contains(&attr) {
-        if let Some(existing) = p.get_raw(attr) {
-            let ambiguous = existing.contains(',') || value.contains(',');
-            let joined = format!("{existing},{value}");
-            p.set(attr, joined);
-            return ambiguous.then(|| {
-                format!("repeated '{attr}' values contain commas and cannot be split safely")
-            });
+        // Only source commas are ambiguous. Commas inserted between previous
+        // values do not make a third repeated element unsafe to preserve.
+        let ambiguous = value
+            .contains(',')
+            .then(|| format!("'{attr}' values contain commas and cannot be split safely"));
+        if let Some(existing) = p.get_raw_mut(attr) {
+            if existing.len().saturating_add(value.len()).saturating_add(1) > MAX_FIELD_BYTES {
+                return Err(EngineError::Limit(format!(
+                    "combined XML field exceeds {MAX_FIELD_BYTES} bytes"
+                )));
+            }
+            existing.push(',');
+            existing.push_str(&value);
+        } else {
+            p.set(attr, value);
         }
+        return Ok(ambiguous);
     }
     if p.has(attr) {
-        return Some(format!(
+        return Ok(Some(format!(
             "repeated scalar product element '{attr}' would be discarded"
-        ));
+        )));
     }
     // First occurrence wins for scalar attributes.
     p.set_if_absent(attr, value);
-    None
+    Ok(None)
 }
 
 /// The fully-qualified element name as a lossy string (e.g. `g:price`).

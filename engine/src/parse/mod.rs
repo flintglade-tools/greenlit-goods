@@ -16,6 +16,9 @@ pub const MAX_PRODUCTS: usize = 250_000;
 pub const MAX_FIELD_BYTES: usize = 1_000_000;
 pub const MAX_XML_DEPTH: usize = 64;
 pub const MAX_ATTRIBUTES_PER_ELEMENT: usize = 256;
+pub const MAX_CSV_COLUMNS: usize = 4096;
+pub const MAX_CSV_HEADER_BYTES: usize = 256;
+pub const MAX_CSV_CELLS: usize = 2_000_000;
 
 /// Auto-detect the feed format from a byte sample.
 ///

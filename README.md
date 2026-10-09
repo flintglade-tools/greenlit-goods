@@ -147,3 +147,7 @@ The test suite includes unit, adversarial parser, specification, rewrite-safety,
 - The supported specification is a dated snapshot. Re-verify it before each release.
 
 See [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and [docs/RELEASING.md](docs/RELEASING.md) for project operations.
+
+### Resource limits
+
+Feeds are limited to 64 MiB, 250,000 products, and 1,000,000 bytes per field (including combined repeated XML values). CSV accepts up to 4,096 columns, 256 bytes per source header label, and 2,000,000 populated input cells. Corrected CSV is limited to 16,000,000 rectangular cells and 128 MiB. Inputs that exceed these limits produce an explicit error before a corrected file is published; the original file is preserved.
