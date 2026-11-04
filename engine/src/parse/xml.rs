@@ -18,7 +18,7 @@
 use quick_xml::escape::resolve_xml_entity;
 use quick_xml::events::{BytesCData, BytesRef, BytesStart, BytesText, Event};
 use quick_xml::reader::Reader;
-use quick_xml::{encoding::Decoder, XmlVersion};
+use quick_xml::XmlVersion;
 
 use crate::error::{EngineError, Result};
 use crate::finding::{Finding, Severity};
@@ -29,7 +29,7 @@ use crate::parse::{MAX_ATTRIBUTES_PER_ELEMENT, MAX_FIELD_BYTES, MAX_PRODUCTS, MA
 /// Attributes for which repeated elements are meaningful and should be joined
 /// rather than having the first occurrence win.
 const MULTIVALUE: &[&str] = &["additional_image_link", "product_type"];
-const GOOGLE_PRODUCT_NAMESPACE: &[u8] = b"http://base.google.com/ns/1.0";
+const GOOGLE_PRODUCT_NAMESPACE: &str = "http://base.google.com/ns/1.0";
 
 pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
     let (text, enc_finding) = decode_lenient(bytes);
@@ -169,11 +169,7 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                     cap_attr = Some(name.clone());
                     cap_buf.clear();
                     cap_depth = stack.len();
-                    cap_href = if atom_href_link {
-                        get_href(&e, reader.decoder())?
-                    } else {
-                        None
-                    };
+                    cap_href = if atom_href_link { get_href(&e)? } else { None };
                 } else if current.is_some() && cap_attr.is_some() {
                     feed.block_rewrite(format!(
                         "nested product structure inside '{}' is audit-only",
@@ -237,7 +233,7 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                     }
                     // Atom links carry the URL in an href attribute.
                     if atom_href_link {
-                        if let Some(href) = get_href(&e, reader.decoder())? {
+                        if let Some(href) = get_href(&e)? {
                             if let Some(reason) = store_attr(product, &name, href)? {
                                 feed.block_rewrite(reason);
                             }
@@ -415,14 +411,14 @@ pub fn parse_xml(bytes: &[u8]) -> Result<Feed> {
                 let version = declaration.version().map_err(|error| {
                     EngineError::Xml(format!("invalid XML declaration: {error}"))
                 })?;
-                if version.as_ref() != b"1.0" {
+                if version.as_ref() != "1.0" {
                     feed.block_rewrite("only XML 1.0 declarations can be rewritten safely");
                 }
                 if let Some(encoding) = declaration.encoding() {
                     let encoding = encoding.map_err(|error| {
                         EngineError::Xml(format!("invalid XML declaration encoding: {error}"))
                     })?;
-                    if !encoding.as_ref().eq_ignore_ascii_case(b"UTF-8") {
+                    if !encoding.as_ref().eq_ignore_ascii_case("UTF-8") {
                         feed.block_rewrite(
                             "non-UTF-8 XML declarations cannot be preserved during rewriting",
                         );
@@ -543,22 +539,22 @@ fn store_attr(p: &mut Product, attr: &str, value: String) -> Result<Option<Strin
     Ok(None)
 }
 
-/// The fully-qualified element name as a lossy string (e.g. `g:price`).
+/// The fully-qualified element name (e.g. `g:price`).
 fn qname(e: &BytesStart) -> String {
-    String::from_utf8_lossy(e.name().as_ref()).into_owned()
+    e.name().as_ref().to_string()
 }
 
 /// Read an element's `href` attribute, if any (used for Atom links).
-fn get_href(e: &BytesStart, decoder: Decoder) -> Result<Option<String>> {
+fn get_href(e: &BytesStart) -> Result<Option<String>> {
     // Every Start/Empty event is validated by `enforce_element_limits` before
     // these helpers run, so an attribute error here would violate that invariant.
     for attr in e
         .attributes()
         .map(|attr| attr.expect("XML attributes were validated before inspection"))
     {
-        if attr.key.as_ref() == b"href" {
+        if attr.key.as_ref() == "href" {
             let value = attr
-                .decoded_and_normalized_value(XmlVersion::Implicit1_0, decoder)
+                .normalized_value(XmlVersion::Implicit1_0)
                 .map_err(|error| EngineError::Xml(format!("invalid href attribute: {error}")))?
                 .into_owned();
             return validate_xml10_text(value)
@@ -572,14 +568,14 @@ fn get_href(e: &BytesStart, decoder: Decoder) -> Result<Option<String>> {
 fn has_non_href_attributes(e: &BytesStart) -> bool {
     e.attributes()
         .map(|attr| attr.expect("XML attributes were validated before inspection"))
-        .any(|attr| attr.key.as_ref() != b"href")
+        .any(|attr| attr.key.as_ref() != "href")
 }
 
 fn has_google_product_namespace(e: &BytesStart) -> bool {
     e.attributes()
         .map(|attr| attr.expect("XML attributes were validated before inspection"))
         .any(|attr| {
-            attr.key.as_ref() == b"xmlns:g" && attr.value.as_ref() == GOOGLE_PRODUCT_NAMESPACE
+            attr.key.as_ref() == "xmlns:g" && attr.value.as_ref() == GOOGLE_PRODUCT_NAMESPACE
         })
 }
 
@@ -588,14 +584,14 @@ fn has_unsupported_rss_attributes(e: &BytesStart) -> bool {
         .map(|attr| attr.expect("XML attributes were validated before inspection"))
         .any(|attr| {
             let key = attr.key.as_ref();
-            key != b"xmlns:g" && !(key == b"version" && attr.value.as_ref() == b"2.0")
+            key != "xmlns:g" && !(key == "version" && attr.value.as_ref() == "2.0")
         })
 }
 
 fn has_rss_version_2(e: &BytesStart) -> bool {
     e.attributes()
         .map(|attr| attr.expect("XML attributes were validated before inspection"))
-        .any(|attr| attr.key.as_ref() == b"version" && attr.value.as_ref() == b"2.0")
+        .any(|attr| attr.key.as_ref() == "version" && attr.value.as_ref() == "2.0")
 }
 
 fn unsupported_item_child(raw_name: &str, canonical_name: &str) -> Option<String> {
@@ -614,19 +610,11 @@ fn unsupported_item_child(raw_name: &str, canonical_name: &str) -> Option<String
 }
 
 fn decode_text(text: &BytesText<'_>) -> std::result::Result<String, String> {
-    let value = text
-        .xml10_content()
-        .map(|value| value.into_owned())
-        .map_err(|error| error.to_string())?;
-    validate_xml10_text(value)
+    validate_xml10_text(text.xml10_content().into_owned())
 }
 
 fn decode_cdata(cdata: &BytesCData<'_>) -> std::result::Result<String, String> {
-    let value = cdata
-        .xml10_content()
-        .map(|value| value.into_owned())
-        .map_err(|error| error.to_string())?;
-    validate_xml10_text(value)
+    validate_xml10_text(cdata.xml10_content().into_owned())
 }
 
 fn validate_xml10_text(value: String) -> std::result::Result<String, String> {
@@ -656,8 +644,8 @@ fn resolve_reference(reference: &BytesRef<'_>) -> std::result::Result<String, St
     {
         return validate_xml10_text(ch.to_string());
     }
-    let name = reference.decode().map_err(|error| error.to_string())?;
-    let value = resolve_xml_entity(&name)
+    let name: &str = reference;
+    let value = resolve_xml_entity(name)
         .map(str::to_string)
         .ok_or_else(|| format!("unrecognized XML entity '&{name};'"))?;
     validate_xml10_text(value)

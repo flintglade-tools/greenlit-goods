@@ -34,7 +34,7 @@ The listed components remain subject to their own license terms. Their complete 
 | once_cell | 1.21.4 | MIT OR Apache-2.0 | https://github.com/matklad/once_cell |
 | once_cell_polyfill | 1.70.2 | MIT OR Apache-2.0 | https://github.com/polyfill-rs/once_cell_polyfill |
 | proc-macro2 | 1.0.106 | MIT OR Apache-2.0 | https://github.com/dtolnay/proc-macro2 |
-| quick-xml | 0.41.0 | MIT | https://github.com/tafia/quick-xml |
+| quick-xml | 0.42.0 | MIT | https://github.com/tafia/quick-xml |
 | quote | 1.0.46 | MIT OR Apache-2.0 | https://github.com/dtolnay/quote |
 | r-efi | 6.0.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later | https://github.com/r-efi/r-efi |
 | rustix | 1.1.4 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://github.com/bytecodealliance/rustix |
