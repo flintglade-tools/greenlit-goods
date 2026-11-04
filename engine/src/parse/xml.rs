@@ -539,7 +539,7 @@ fn store_attr(p: &mut Product, attr: &str, value: String) -> Result<Option<Strin
     Ok(None)
 }
 
-/// The fully-qualified element name as a lossy string (e.g. `g:price`).
+/// The fully-qualified element name (e.g. `g:price`).
 fn qname(e: &BytesStart) -> String {
     e.name().as_ref().to_string()
 }
