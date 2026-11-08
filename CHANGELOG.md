@@ -4,14 +4,24 @@ All notable changes are documented here. This project follows semantic versionin
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-08
+
 ### Added
 
 - Added a root, Marketplace-compatible Docker action that audits checked-in feeds with the real Greenlit Goods CLI and defaults to strict CI gating.
 - Added action input validation, an entrypoint contract test, Docker integration coverage, and Marketplace release documentation.
+- Added a code of conduct and issue templates.
 
 ### Changed
 
-- Advanced the development version to `0.2.0` for the new GitHub Action surface.
+- Advanced the version to `0.2.0` for the new GitHub Action surface.
+- Ported the XML parser to `quick-xml` 0.42.
+- Updated `serde_json`, `encoding_rs` and `clap`.
+- Added a second release-signing key to `.github/allowed_signers`; tags signed with the first key still verify.
+
+### Security
+
+- Capped CSV columns, header length and total cells, combined XML field size, and the size of rewritten output, so a hostile feed stops with a limit error instead of exhausting memory.
 
 ## [0.1.1] - 2026-07-13
 
