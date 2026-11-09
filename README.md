@@ -34,7 +34,7 @@ On Windows the binary is `target\release\greenlit.exe`.
 Prebuilt, checksum-paired Linux x86_64, macOS arm64/x86_64, and Windows x86_64 archives are available from [GitHub Releases](https://github.com/flintglade-tools/greenlit-goods/releases). Verify the adjacent `.sha256` file before running an archive; for example:
 
 ```console
-sha256sum -c greenlit-v0.1.1-linux-x86_64.tar.gz.sha256
+sha256sum -c greenlit-v0.2.0-linux-x86_64.tar.gz.sha256
 ```
 
 Useful options:
